@@ -475,8 +475,27 @@ func (t *Transport) reloadCertificates() {
 	t.TLSClientConfig.Certificates = []tls.Certificate{cert}
 }
 
+var roundTripHook func(*tls.Config)
+var roundTripLock sync.Mutex
+
+func SetRoundTripHook(hook func(*tls.Config)) {
+	roundTripLock.Lock()
+	defer roundTripLock.Unlock()
+
+	roundTripHook = hook
+}
+
 // RoundTrip implements the RoundTripper interface.
 func (t *Transport) RoundTrip(req *http.Request) (resp *http.Response, err error) {
+	{
+		roundTripLock.Lock()
+		defer roundTripLock.Unlock()
+
+		if roundTripHook != nil {
+			roundTripHook(t.TLSClientConfig)
+		}
+	}
+
 	// Check if certificates are being used and the certificates are expired
 	if isCertificateExpired(t.TLSClientConfig) {
 		t.reloadCertificates()
